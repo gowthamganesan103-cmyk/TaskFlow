@@ -18,6 +18,24 @@ const statusStyles = {
   Completed: 'border-emerald-200 bg-emerald-50 text-emerald-700',
 }
 
+// Converts due dates like "Nov 27" or "2026-11-27" to sortable timestamps
+const getDueDateValue = (due) => {
+  if (!due) return Number.MAX_SAFE_INTEGER
+
+  const parsed = new Date(due)
+
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.getTime()
+  }
+
+  const currentYear = new Date().getFullYear()
+  const parsedWithYear = new Date(`${due}, ${currentYear}`)
+
+  return Number.isNaN(parsedWithYear.getTime())
+    ? Number.MAX_SAFE_INTEGER
+    : parsedWithYear.getTime()
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Overview')
   const [taskList, setTaskList] = useState(
@@ -30,6 +48,7 @@ function App() {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
   const [taskFilter, setTaskFilter] = useState('All')
+  const [sortBy, setSortBy] = useState('default')
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -51,6 +70,8 @@ function App() {
   const pendingCount = taskList.filter(
     (task) => getTaskStatus(task.id) === 'Pending',
   ).length
+
+  const totalCount = taskList.length
 
   const progress = taskList.length
     ? Math.round((completedCount / taskList.length) * 100)
@@ -108,6 +129,29 @@ function App() {
     return matchesSearch && matchesFilter
   })
 
+  // Sort filtered tasks
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    if (sortBy === 'priority') {
+      const priorityOrder = { High: 1, Medium: 2, Low: 3 }
+      return (priorityOrder[a.priority] || 4) - (priorityOrder[b.priority] || 4)
+    }
+
+    if (sortBy === 'due') {
+      return getDueDateValue(a.due) - getDueDateValue(b.due)
+    }
+
+    if (sortBy === 'newest') {
+      const getTaskTimestamp = (task) => {
+        const idNumber = Number(task.id.replace('task-', ''))
+        return Number.isNaN(idNumber) ? 0 : idNumber
+      }
+
+      return getTaskTimestamp(b) - getTaskTimestamp(a)
+    }
+
+    return 0
+  })
+
   // Add new task
   const handleAddTask = (event) => {
     event.preventDefault()
@@ -127,6 +171,14 @@ function App() {
     setTaskStatuses((prev) => ({ ...prev, [taskId]: 'Pending' }))
     setNewTask({ title: '', subject: '', due: '', priority: 'Medium' })
     setShowAddTask(false)
+  }
+
+  // Task filter counts
+  const filterCounts = {
+    All: totalCount,
+    Pending: pendingCount,
+    'In Progress': inProgressCount,
+    Completed: completedCount,
   }
 
   return (
@@ -149,13 +201,26 @@ function App() {
 
             <div className="flex items-center gap-2 sm:gap-3">
               {searchOpen && (
-                <input
-                  autoFocus
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search tasks..."
-                  className="w-36 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 sm:w-48"
-                />
+                <div className="relative">
+                  <input
+                    autoFocus
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search tasks..."
+                    className="w-36 rounded-xl border border-gray-200 bg-white px-3 py-2.5 pr-9 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 sm:w-48"
+                  />
+
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      aria-label="Clear search"
+                      title="Clear search"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
               )}
 
               <button
@@ -251,25 +316,50 @@ function App() {
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
-                  {['All', 'Pending', 'In Progress', 'Completed'].map((filter) => (
-                    <button
-                      key={filter}
-                      onClick={() => setTaskFilter(filter)}
-                      className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
-                        taskFilter === filter
-                          ? 'bg-white text-indigo-600 shadow-sm'
-                          : 'text-gray-500 hover:text-gray-800'
-                      }`}
-                    >
-                      {filter}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Status Filters with Counters */}
+                  <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+                    {['All', 'Pending', 'In Progress', 'Completed'].map((filter) => (
+                      <button
+                        key={filter}
+                        onClick={() => setTaskFilter(filter)}
+                        className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
+                          taskFilter === filter
+                            ? 'bg-white text-indigo-600 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-800'
+                        }`}
+                      >
+                        <span>{filter}</span>
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                            taskFilter === filter
+                              ? 'bg-indigo-50 text-indigo-600'
+                              : 'bg-gray-200 text-gray-500'
+                          }`}
+                        >
+                          {filterCounts[filter]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Sorting Dropdown */}
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    aria-label="Sort tasks"
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  >
+                    <option value="default">Default order</option>
+                    <option value="priority">Priority (High first)</option>
+                    <option value="due">Due date</option>
+                    <option value="newest">Newest first</option>
+                  </select>
                 </div>
               </div>
 
               <div className="space-y-3">
-                {filteredTasks.map((task) => {
+                {sortedTasks.map((task) => {
                   const status = getTaskStatus(task.id)
                   const isCompleted = status === 'Completed'
 
@@ -339,7 +429,7 @@ function App() {
                   )
                 })}
 
-                {filteredTasks.length === 0 && (
+                {sortedTasks.length === 0 && (
                   <div className="rounded-xl border border-dashed border-gray-200 py-10 text-center">
                     <Search className="mx-auto mb-2 text-gray-300" size={24} />
                     <p className="text-sm text-gray-500">No matching tasks found.</p>
