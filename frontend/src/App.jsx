@@ -27,7 +27,7 @@ function App() {
       <main className="min-h-screen px-5 py-8 md:ml-64 md:px-10">
         <div className="mx-auto max-w-7xl">
           {/* Header */}
-          <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <header className="mb-8 flex flex-wrap items-center justify-between gap-4 pl-12 md:pl-0">
             <div>
               <p className="text-sm text-gray-500">Student Workspace</p>
               <h1 className="mt-1 text-2xl font-bold text-gray-900">
