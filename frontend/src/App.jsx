@@ -1,4 +1,3 @@
-
 import { useState } from 'react'
 import {
   Bell,
@@ -8,6 +7,8 @@ import {
   X,
   CalendarDays,
   Trash2,
+  ListTodo,
+  RotateCcw,
 } from 'lucide-react'
 import Sidebar from './components/layout/Sidebar'
 import { stats, tasks as initialTasks, priorityStyles } from './data/dashboardData'
@@ -179,6 +180,13 @@ function App() {
     Pending: pendingCount,
     'In Progress': inProgressCount,
     Completed: completedCount,
+  }
+
+  // Reset search, filter, and sorting
+  const resetFilters = () => {
+    setSearchTerm('')
+    setTaskFilter('All')
+    setSortBy('default')
   }
 
   return (
@@ -358,87 +366,104 @@ function App() {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                {sortedTasks.map((task) => {
-                  const status = getTaskStatus(task.id)
-                  const isCompleted = status === 'Completed'
+              {/* Tasks or Empty State */}
+              {sortedTasks.length > 0 ? (
+                <div className="space-y-3">
+                  {sortedTasks.map((task) => {
+                    const status = getTaskStatus(task.id)
+                    const isCompleted = status === 'Completed'
 
-                  return (
-                    <div
-                      key={task.id}
-                      className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-100 p-4 transition hover:bg-gray-50"
-                    >
-                      {/* Completion Toggle */}
-                      <button
-                        onClick={() => toggleTask(task.id)}
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
-                          isCompleted
-                            ? 'border-emerald-500 bg-emerald-500 text-white'
-                            : 'border-gray-300 hover:border-indigo-500'
-                        }`}
-                        aria-label={isCompleted ? 'Reopen task' : 'Complete task'}
+                    return (
+                      <div
+                        key={task.id}
+                        className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-100 p-4 transition hover:bg-gray-50"
                       >
-                        {isCompleted && <CheckCircle2 size={14} />}
-                      </button>
-
-                      {/* Task Details */}
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={`truncate text-sm font-medium ${
+                        {/* Completion Toggle */}
+                        <button
+                          onClick={() => toggleTask(task.id)}
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
                             isCompleted
-                              ? 'text-gray-400 line-through'
-                              : 'text-gray-800'
+                              ? 'border-emerald-500 bg-emerald-500 text-white'
+                              : 'border-gray-300 hover:border-indigo-500'
                           }`}
+                          aria-label={isCompleted ? 'Reopen task' : 'Complete task'}
                         >
-                          {task.title}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-500">
-                          {task.subject} · Due {task.due}
-                        </p>
+                          {isCompleted && <CheckCircle2 size={14} />}
+                        </button>
+
+                        {/* Task Details */}
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={`truncate text-sm font-medium ${
+                              isCompleted
+                                ? 'text-gray-400 line-through'
+                                : 'text-gray-800'
+                            }`}
+                          >
+                            {task.title}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            {task.subject} · Due {task.due}
+                          </p>
+                        </div>
+
+                        {/* Status Dropdown */}
+                        <select
+                          value={status}
+                          onChange={(e) => updateTaskStatus(task.id, e.target.value)}
+                          aria-label={`Status for ${task.title}`}
+                          className={`rounded-lg border px-2 py-1.5 text-xs font-semibold outline-none transition focus:ring-2 focus:ring-indigo-100 ${statusStyles[status]}`}
+                        >
+                          <option value="Pending">Pending</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Completed">Completed</option>
+                        </select>
+
+                        {/* Priority Badge */}
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 ${getPriorityBadge(task.priority)}`}
+                        >
+                          {task.priority}
+                        </span>
+
+                        {/* Delete */}
+                        <button
+                          onClick={() => deleteTask(task.id)}
+                          aria-label={`Delete ${task.title}`}
+                          title="Delete task"
+                          className="shrink-0 rounded-lg p-2 text-gray-400 transition hover:bg-rose-50 hover:text-rose-500"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
-
-                      {/* Status Dropdown */}
-                      <select
-                        value={status}
-                        onChange={(e) => updateTaskStatus(task.id, e.target.value)}
-                        aria-label={`Status for ${task.title}`}
-                        className={`rounded-lg border px-2 py-1.5 text-xs font-semibold outline-none transition focus:ring-2 focus:ring-indigo-100 ${statusStyles[status]}`}
-                      >
-                        <option value="Pending">Pending</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Completed">Completed</option>
-                      </select>
-
-                      {/* Priority Badge */}
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 ${getPriorityBadge(task.priority)}`}
-                      >
-                        {task.priority}
-                      </span>
-
-                      {/* Delete */}
-                      <button
-                        onClick={() => deleteTask(task.id)}
-                        aria-label={`Delete ${task.title}`}
-                        title="Delete task"
-                        className="shrink-0 rounded-lg p-2 text-gray-400 transition hover:bg-rose-50 hover:text-rose-500"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  )
-                })}
-
-                {sortedTasks.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-gray-200 py-10 text-center">
-                    <Search className="mx-auto mb-2 text-gray-300" size={24} />
-                    <p className="text-sm text-gray-500">No matching tasks found.</p>
-                    <p className="mt-1 text-xs text-gray-400">
-                      Try another search or filter.
-                    </p>
+                    )
+                  })}
+                </div>
+              ) : (
+                /* Empty State */
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50/70 px-6 py-12 text-center">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
+                    <ListTodo size={26} />
                   </div>
-                )}
-              </div>
+
+                  <h3 className="text-base font-semibold text-gray-800">
+                    No tasks found
+                  </h3>
+
+                  <p className="mt-2 max-w-sm text-sm text-gray-500">
+                    No tasks match your current search or filter. Try adjusting
+                    them to see your tasks again.
+                  </p>
+
+                  <button
+                    onClick={resetFilters}
+                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
+                  >
+                    <RotateCcw size={16} />
+                    Reset Filters
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Progress */}
@@ -502,7 +527,7 @@ function App() {
             <div className="mb-5">
               <h2 className="text-lg font-semibold text-gray-900">Upcoming Deadlines</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Don&apos;t miss your important submissions
+                Don't miss your important submissions
               </p>
             </div>
 
