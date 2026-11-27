@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import {
   Bell,
@@ -23,6 +24,11 @@ const statusStyles = {
 const getDueDateValue = (due) => {
   if (!due) return Number.MAX_SAFE_INTEGER
 
+  if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+    const [year, month, day] = due.split('-').map(Number)
+    return new Date(year, month - 1, day).getTime()
+  }
+
   const parsed = new Date(due)
 
   if (!Number.isNaN(parsed.getTime())) {
@@ -35,6 +41,47 @@ const getDueDateValue = (due) => {
   return Number.isNaN(parsedWithYear.getTime())
     ? Number.MAX_SAFE_INTEGER
     : parsedWithYear.getTime()
+}
+
+// Determines deadline urgency
+const getDeadlineUrgency = (due, status) => {
+  if (!due || status === 'Completed') return null
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  let deadline
+
+  // Parse ISO date without timezone conversion
+  if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+    const [year, month, day] = due.split('-').map(Number)
+    deadline = new Date(year, month - 1, day)
+  } else {
+    // Parse dates like "Nov 27"
+    deadline = new Date(`${due}, ${today.getFullYear()}`)
+
+    if (Number.isNaN(deadline.getTime())) return null
+
+    // Treat dates far in the past as next year's deadline
+    const daysDifference = (deadline - today) / (1000 * 60 * 60 * 24)
+
+    if (daysDifference < -180) {
+      deadline.setFullYear(deadline.getFullYear() + 1)
+    }
+  }
+
+  deadline.setHours(0, 0, 0, 0)
+
+  if (deadline < today) return 'Overdue'
+  if (deadline.getTime() === today.getTime()) return 'Due Today'
+
+  return 'Upcoming'
+}
+
+const urgencyStyles = {
+  Overdue: 'border-rose-200 bg-rose-50 text-rose-600',
+  'Due Today': 'border-amber-200 bg-amber-50 text-amber-700',
+  Upcoming: 'border-indigo-200 bg-indigo-50 text-indigo-600',
 }
 
 function App() {
@@ -116,6 +163,21 @@ function App() {
     }
 
     return styles[priority] || priorityStyles[priority] || 'bg-gray-100 text-gray-600'
+  }
+
+  // Reusable deadline badge
+  const renderUrgencyBadge = (task, status) => {
+    const urgency = getDeadlineUrgency(task.due, status)
+
+    if (!urgency) return null
+
+    return (
+      <span
+        className={`inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${urgencyStyles[urgency]}`}
+      >
+        {urgency}
+      </span>
+    )
   }
 
   // Search and status filters
@@ -372,6 +434,7 @@ function App() {
                   {sortedTasks.map((task) => {
                     const status = getTaskStatus(task.id)
                     const isCompleted = status === 'Completed'
+                    const urgency = getDeadlineUrgency(task.due, status)
 
                     return (
                       <div
@@ -402,9 +465,20 @@ function App() {
                           >
                             {task.title}
                           </p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            {task.subject} · Due {task.due}
-                          </p>
+
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {task.subject} · Due {task.due}
+                            </span>
+
+                            {urgency && (
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${urgencyStyles[urgency]}`}
+                              >
+                                {urgency}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {/* Status Dropdown */}
@@ -535,7 +609,11 @@ function App() {
               {taskList
                 .filter((task) => getTaskStatus(task.id) !== 'Completed')
                 .slice(0, 4)
-                .map((task, index) => (
+                .map((task, index) => {
+                  const status = getTaskStatus(task.id)
+                  const urgency = getDeadlineUrgency(task.due, status)
+
+                  return (
                   <div
                     key={task.id}
                     className="rounded-xl border border-gray-100 p-4 transition hover:shadow-sm"
@@ -554,15 +632,25 @@ function App() {
                     <h3 className="text-sm font-semibold text-gray-800">{task.title}</h3>
                     <p className="mt-2 text-xs text-gray-500">{task.subject}</p>
                     <p className="mt-2 text-xs font-medium">
-                      <span className={`rounded-full border px-2 py-1 ${statusStyles[getTaskStatus(task.id)]}`}>
-                        {getTaskStatus(task.id)}
+                      <span className={`rounded-full border px-2 py-1 ${statusStyles[status]}`}>
+                        {status}
                       </span>
                     </p>
-                    <p className="mt-3 text-sm font-medium text-indigo-600">
-                      Due {task.due}
-                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-indigo-600">
+                        Due {task.due}
+                      </p>
+                      {urgency && (
+                        <span
+                          className={`rounded-full border px-2 py-1 text-xs font-semibold ${urgencyStyles[urgency]}`}
+                        >
+                          {urgency}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                ))}
+                  )
+                })}
             </div>
 
             {taskList.every((task) => getTaskStatus(task.id) === 'Completed') && (
