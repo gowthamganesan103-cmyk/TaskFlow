@@ -13,6 +13,7 @@ import {
   Pencil,
 } from 'lucide-react'
 import Sidebar from './components/layout/Sidebar'
+import TaskCalendar from './components/calendar/TaskCalendar'
 import { stats, tasks as initialTasks, priorityStyles } from './data/dashboardData'
 
 const statusStyles = {
@@ -687,6 +688,14 @@ function App() {
             })}
           </section>
 
+          {activePage === 'Calendar' ? (
+            <TaskCalendar
+              tasks={taskList}
+              getTaskStatus={getTaskStatus}
+              onEditTask={handleEditTask}
+            />
+          ) : (
+            <>
           {/* Main Dashboard */}
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             {/* Task List */}
@@ -1017,6 +1026,8 @@ function App() {
               </p>
             )}
           </section>
+            </>
+          )}
         </div>
       </main>
 
