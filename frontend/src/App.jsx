@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   X,
   CalendarDays,
+  Trash2,
 } from 'lucide-react'
 import Sidebar from './components/layout/Sidebar'
 import { stats, tasks as initialTasks, priorityStyles } from './data/dashboardData'
@@ -40,6 +41,16 @@ function App() {
         ? prev.filter((id) => id !== taskId)
         : [...prev, taskId],
     )
+  }
+
+  // Delete a task and remove its completion state
+  const deleteTask = (taskId) => {
+    const confirmed = window.confirm('Are you sure you want to delete this task?')
+
+    if (!confirmed) return
+
+    setTaskList((prev) => prev.filter((task) => task.id !== taskId))
+    setCompletedTasks((prev) => prev.filter((id) => id !== taskId))
   }
 
   const filteredTasks = taskList.filter((task) => {
@@ -254,6 +265,16 @@ function App() {
                       >
                         {task.priority}
                       </span>
+
+                      {/* Delete Task */}
+                      <button
+                        onClick={() => deleteTask(task.id)}
+                        aria-label={`Delete ${task.title}`}
+                        title="Delete task"
+                        className="shrink-0 rounded-lg p-2 text-gray-400 transition hover:bg-rose-50 hover:text-rose-500"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   )
                 })}
@@ -283,7 +304,9 @@ function App() {
                   }}
                 >
                   <div className="flex h-36 w-36 flex-col items-center justify-center rounded-full bg-white">
-                    <span className="text-4xl font-bold text-gray-900">{progress}%</span>
+                    <span className="text-4xl font-bold text-gray-900">
+                      {progress}%
+                    </span>
                     <span className="mt-1 text-xs text-gray-500">Completed</span>
                   </div>
                 </div>
@@ -319,29 +342,34 @@ function App() {
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {taskList.filter((task) => !completedTasks.includes(task.id)).slice(0, 4).map((task, index) => (
-                <div
-                  key={task.id}
-                  className="rounded-xl border border-gray-100 p-4 transition hover:shadow-sm"
-                >
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-xs text-gray-400">
-                      <CalendarDays size={13} />
-                      Deadline {index + 1}
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-1 text-xs font-medium ${
-                        priorityStyles[task.priority]
-                      }`}
-                    >
-                      {task.priority}
-                    </span>
+              {taskList
+                .filter((task) => !completedTasks.includes(task.id))
+                .slice(0, 4)
+                .map((task, index) => (
+                  <div
+                    key={task.id}
+                    className="rounded-xl border border-gray-100 p-4 transition hover:shadow-sm"
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className="flex items-center gap-1 text-xs text-gray-400">
+                        <CalendarDays size={13} />
+                        Deadline {index + 1}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-medium ${
+                          priorityStyles[task.priority]
+                        }`}
+                      >
+                        {task.priority}
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-semibold text-gray-800">{task.title}</h3>
+                    <p className="mt-2 text-xs text-gray-500">{task.subject}</p>
+                    <p className="mt-3 text-sm font-medium text-indigo-600">
+                      Due {task.due}
+                    </p>
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-800">{task.title}</h3>
-                  <p className="mt-2 text-xs text-gray-500">{task.subject}</p>
-                  <p className="mt-3 text-sm font-medium text-indigo-600">Due {task.due}</p>
-                </div>
-              ))}
+                ))}
             </div>
 
             {taskList.every((task) => completedTasks.includes(task.id)) && (
