@@ -53,6 +53,18 @@ function App() {
     setCompletedTasks((prev) => prev.filter((id) => id !== taskId))
   }
 
+  // Professional priority badge styles
+  const getPriorityBadge = (priority) => {
+    const styles = {
+      High: 'border border-rose-200 bg-rose-50 text-rose-700 ring-1 ring-rose-100',
+      Medium:
+        'border border-amber-200 bg-amber-50 text-amber-700 ring-1 ring-amber-100',
+      Low: 'border border-emerald-200 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
+    }
+
+    return styles[priority] || priorityStyles[priority] || 'bg-gray-100 text-gray-600'
+  }
+
   const filteredTasks = taskList.filter((task) => {
     const matchesSearch = `${task.title} ${task.subject}`
       .toLowerCase()
@@ -259,9 +271,7 @@ function App() {
                       </div>
 
                       <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                          priorityStyles[task.priority]
-                        }`}
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 ${getPriorityBadge(task.priority)}`}
                       >
                         {task.priority}
                       </span>
@@ -356,9 +366,7 @@ function App() {
                         Deadline {index + 1}
                       </span>
                       <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          priorityStyles[task.priority]
-                        }`}
+                        className={`rounded-full px-2 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 ${getPriorityBadge(task.priority)}`}
                       >
                         {task.priority}
                       </span>
