@@ -1,5 +1,5 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   CheckSquare,
@@ -21,6 +21,17 @@ const navigation = [
 
 function Sidebar({ activePage, setActivePage }) {
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    if (!mobileOpen) return undefined
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setMobileOpen(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [mobileOpen])
 
   const handleNavigation = (page) => {
     setActivePage(page)
@@ -50,7 +61,9 @@ function Sidebar({ activePage, setActivePage }) {
             return (
               <button
                 key={label}
+                type="button"
                 onClick={() => handleNavigation(label)}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? 'bg-indigo-50 text-indigo-600 shadow-sm'
@@ -70,6 +83,7 @@ function Sidebar({ activePage, setActivePage }) {
 
       <div className="mt-auto border-t border-gray-100 p-4">
         <button
+          type="button"
           onClick={() => handleNavigation('Settings')}
           className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
             activePage === 'Settings'
@@ -81,7 +95,7 @@ function Sidebar({ activePage, setActivePage }) {
           Settings
         </button>
 
-        <button className="mt-4 flex w-full items-center gap-3 rounded-xl bg-gray-50 p-3 text-left transition hover:bg-gray-100">
+        <div className="mt-4 flex w-full items-center gap-3 rounded-xl bg-gray-50 p-3 text-left">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
             GG
           </div>
@@ -92,7 +106,7 @@ function Sidebar({ activePage, setActivePage }) {
             <p className="truncate text-xs text-gray-400">Student account</p>
           </div>
           <ChevronDown size={16} className="ml-auto text-gray-400" />
-        </button>
+        </div>
       </div>
     </>
   )
@@ -101,8 +115,10 @@ function Sidebar({ activePage, setActivePage }) {
     <>
       {/* Mobile Menu Button */}
       <button
+        type="button"
         onClick={() => setMobileOpen(true)}
         aria-label="Open navigation menu"
+        aria-expanded={mobileOpen}
         className="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm transition hover:bg-gray-50 md:hidden"
       >
         <Menu size={20} />
@@ -126,6 +142,7 @@ function Sidebar({ activePage, setActivePage }) {
       >
         <div className="absolute right-3 top-4">
           <button
+            type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Close navigation menu"
             className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100"
