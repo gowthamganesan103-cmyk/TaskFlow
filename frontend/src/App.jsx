@@ -102,6 +102,15 @@ const urgencyStyles = {
   Upcoming: 'border-indigo-200 bg-indigo-50 text-indigo-600',
 }
 
+const categoryStyles = {
+  Study: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+  Work: 'border-sky-200 bg-sky-50 text-sky-700',
+  Personal: 'border-violet-200 bg-violet-50 text-violet-700',
+  General: 'border-gray-200 bg-gray-100 text-gray-600',
+}
+
+const taskCategories = ['General', 'Study', 'Work', 'Personal']
+
 const formatDueDate = (date) => {
   if (!date) return ''
 
@@ -123,7 +132,30 @@ function App() {
       const savedTasks = window.localStorage.getItem('taskflow.tasks')
       if (savedTasks) {
         const parsedTasks = JSON.parse(savedTasks)
-        if (Array.isArray(parsedTasks)) return parsedTasks
+        if (Array.isArray(parsedTasks)) {
+          return parsedTasks
+            .filter(
+              (task) =>
+                task &&
+                typeof task === 'object' &&
+                typeof task.title === 'string' &&
+                typeof task.subject === 'string',
+            )
+            .map((task) => ({
+              ...task,
+              id:
+                typeof task.id === 'string' && task.id
+                  ? task.id
+                  : `task-${crypto.randomUUID?.() || Date.now()}`,
+              due: normalizeSeedDueDate(task.due),
+              priority: ['Low', 'Medium', 'High'].includes(task.priority)
+                ? task.priority
+                : 'Medium',
+              category: taskCategories.includes(task.category)
+                ? task.category
+                : 'General',
+            }))
+        }
       }
     } catch {
       // Ignore unavailable or invalid local storage and use the seed tasks.
@@ -133,6 +165,7 @@ function App() {
       ...task,
       id: `task-${index}`,
       due: normalizeSeedDueDate(task.due),
+      category: 'General',
     }))
   })
 
@@ -142,7 +175,11 @@ function App() {
       if (savedStatuses) {
         const parsedStatuses = JSON.parse(savedStatuses)
         if (parsedStatuses && typeof parsedStatuses === 'object') {
-          return parsedStatuses
+          return Object.fromEntries(
+            Object.entries(parsedStatuses).filter(([, status]) =>
+              ['Pending', 'In Progress', 'Completed'].includes(status),
+            ),
+          )
         }
       }
     } catch {
@@ -157,6 +194,7 @@ function App() {
   const [editingTask, setEditingTask] = useState(null)
   const [taskFilter, setTaskFilter] = useState('All')
   const [priorityFilter, setPriorityFilter] = useState('All')
+  const [categoryFilter, setCategoryFilter] = useState('All')
   const [sortBy, setSortBy] = useState('default')
   const submitLock = useRef(false)
 
@@ -165,12 +203,18 @@ function App() {
     subject: '',
     due: '',
     priority: 'Medium',
+    category: 'General',
   })
 
   // Form validation errors
   const [formErrors, setFormErrors] = useState({})
 
-  const getTaskStatus = (taskId) => taskStatuses[taskId] || 'Pending'
+  const getTaskStatus = (taskId) => {
+    const status = taskStatuses[taskId]
+    return ['Pending', 'In Progress', 'Completed'].includes(status)
+      ? status
+      : 'Pending'
+  }
 
   useEffect(() => {
     try {
@@ -189,7 +233,13 @@ function App() {
         setShowAddTask(false)
         setEditingTask(null)
         setFormErrors({})
-        setNewTask({ title: '', subject: '', due: '', priority: 'Medium' })
+        setNewTask({
+          title: '',
+          subject: '',
+          due: '',
+          priority: 'Medium',
+          category: 'General',
+        })
         submitLock.current = false
       }
     }
@@ -237,10 +287,11 @@ function App() {
   const upcomingCount = taskList.filter(
     (task) =>
       getTaskStatus(task.id) !== 'Completed' &&
-      getDeadlineUrgency(task.due, getTaskStatus(task.id)) !== null,
+      getDeadlineUrgency(task.due, getTaskStatus(task.id)) === 'Upcoming',
   ).length
 
   const updateTaskStatus = (taskId, status) => {
+    if (!['Pending', 'In Progress', 'Completed'].includes(status)) return
     setTaskStatuses((prev) => ({ ...prev, [taskId]: status }))
   }
 
@@ -310,6 +361,10 @@ function App() {
       errors.priority = 'Please select a valid priority.'
     }
 
+    if (!taskCategories.includes(newTask.category)) {
+      errors.category = 'Please select a valid category.'
+    }
+
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -323,6 +378,7 @@ function App() {
       subject: task.subject,
       due: normalizeSeedDueDate(task.due),
       priority: task.priority,
+      category: task.category || 'General',
     })
     setShowAddTask(true)
   }
@@ -332,7 +388,13 @@ function App() {
     setShowAddTask(false)
     setEditingTask(null)
     setFormErrors({})
-    setNewTask({ title: '', subject: '', due: '', priority: 'Medium' })
+    setNewTask({
+      title: '',
+      subject: '',
+      due: '',
+      priority: 'Medium',
+      category: 'General',
+    })
     submitLock.current = false
   }
 
@@ -369,6 +431,7 @@ function App() {
       subject: newTask.subject.trim(),
       id: taskId,
       due: newTask.due,
+      category: newTask.category,
     }
 
     setTaskList((prev) => [taskToAdd, ...prev])
@@ -389,6 +452,7 @@ function App() {
       subject: newTask.subject.trim(),
       due: newTask.due,
       priority: newTask.priority,
+      category: newTask.category,
     }
 
     setTaskList((prev) =>
@@ -416,6 +480,9 @@ function App() {
       taskFilter === 'All' || getTaskStatus(task.id) === taskFilter
     const matchesPriority =
       priorityFilter === 'All' || task.priority === priorityFilter
+    const matchesCategory =
+      categoryFilter === 'All' ||
+      (task.category || 'General') === categoryFilter
     const urgency = getDeadlineUrgency(task.due, getTaskStatus(task.id))
     const matchesPage =
       activePage === 'Today'
@@ -426,7 +493,13 @@ function App() {
             ? urgency !== null
             : true
 
-    return matchesSearch && matchesFilter && matchesPriority && matchesPage
+    return (
+      matchesSearch &&
+      matchesFilter &&
+      matchesPriority &&
+      matchesCategory &&
+      matchesPage
+    )
   })
 
   const sortedTasks = [...filteredTasks].sort((a, b) => {
@@ -462,12 +535,24 @@ function App() {
     setActivePage('Overview')
     setTaskFilter('All')
     setPriorityFilter('All')
+    setCategoryFilter('All')
     setSortBy('default')
+  }
+
+  const handlePageChange = (page) => {
+    setSearchTerm('')
+    setTaskFilter('All')
+    setPriorityFilter('All')
+    setCategoryFilter('All')
+    setSortBy('default')
+    setSearchOpen(false)
+    setNotificationsOpen(false)
+    setActivePage(page)
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Sidebar activePage={activePage} setActivePage={setActivePage} />
+      <Sidebar activePage={activePage} setActivePage={handlePageChange} />
 
       <main className="min-h-screen px-5 py-8 md:ml-64 md:px-10">
         <div className="mx-auto max-w-7xl">
@@ -549,7 +634,13 @@ function App() {
                 onClick={() => {
                   setEditingTask(null)
                   setFormErrors({})
-                  setNewTask({ title: '', subject: '', due: '', priority: 'Medium' })
+                  setNewTask({
+                    title: '',
+                    subject: '',
+                    due: '',
+                    priority: 'Medium',
+                    category: 'General',
+                  })
                   setShowAddTask(true)
                 }}
                 className="flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 sm:px-4"
@@ -648,6 +739,17 @@ function App() {
                     <option value="Low">Low priority</option>
                   </select>
                   <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    aria-label="Filter tasks by category"
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  >
+                    <option value="All">All categories</option>
+                    {taskCategories.map((category) => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                  <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
                     aria-label="Sort tasks"
@@ -711,6 +813,11 @@ function App() {
                                 {urgency}
                               </span>
                             )}
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${categoryStyles[task.category || 'General']}`}
+                            >
+                              {task.category || 'General'}
+                            </span>
                           </div>
                         </div>
 
@@ -925,7 +1032,7 @@ function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="task-modal-title"
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
           >
             <div className="mb-5 flex items-center justify-between">
               <div>
@@ -1044,6 +1151,32 @@ function App() {
                 </select>
                 {formErrors.priority && (
                   <p id="task-priority-error" className="mt-1 text-xs text-rose-500">{formErrors.priority}</p>
+                )}
+              </div>
+
+              {/* Category */}
+              <div>
+                <label htmlFor="task-category" className="mb-1 block text-sm font-medium text-gray-700">
+                  Category
+                </label>
+                <select
+                  id="task-category"
+                  value={newTask.category}
+                  onChange={(e) => handleFieldChange('category', e.target.value)}
+                  aria-invalid={Boolean(formErrors.category)}
+                  aria-describedby={formErrors.category ? 'task-category-error' : undefined}
+                  className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-100 ${
+                    formErrors.category
+                      ? 'border-rose-400 focus:border-rose-400'
+                      : 'border-gray-200 focus:border-indigo-400'
+                  }`}
+                >
+                  {taskCategories.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+                {formErrors.category && (
+                  <p id="task-category-error" className="mt-1 text-xs text-rose-500">{formErrors.category}</p>
                 )}
               </div>
 
