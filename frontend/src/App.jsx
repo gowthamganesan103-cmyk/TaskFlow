@@ -12,17 +12,25 @@ import {
 import Sidebar from './components/layout/Sidebar'
 import { stats, tasks as initialTasks, priorityStyles } from './data/dashboardData'
 
+const statusStyles = {
+  Pending: 'border-gray-200 bg-gray-100 text-gray-600',
+  'In Progress': 'border-amber-200 bg-amber-50 text-amber-700',
+  Completed: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Overview')
   const [taskList, setTaskList] = useState(
     initialTasks.map((task, index) => ({ ...task, id: `task-${index}` })),
   )
-  const [completedTasks, setCompletedTasks] = useState([])
+
+  const [taskStatuses, setTaskStatuses] = useState({})
   const [searchTerm, setSearchTerm] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
   const [taskFilter, setTaskFilter] = useState('All')
+
   const [newTask, setNewTask] = useState({
     title: '',
     subject: '',
@@ -30,30 +38,53 @@ function App() {
     priority: 'Medium',
   })
 
-  const completedCount = completedTasks.length
+  const getTaskStatus = (taskId) => taskStatuses[taskId] || 'Pending'
+
+  const completedCount = taskList.filter(
+    (task) => getTaskStatus(task.id) === 'Completed',
+  ).length
+
+  const inProgressCount = taskList.filter(
+    (task) => getTaskStatus(task.id) === 'In Progress',
+  ).length
+
+  const pendingCount = taskList.filter(
+    (task) => getTaskStatus(task.id) === 'Pending',
+  ).length
+
   const progress = taskList.length
     ? Math.round((completedCount / taskList.length) * 100)
     : 0
 
+  // Update task status
+  const updateTaskStatus = (taskId, status) => {
+    setTaskStatuses((prev) => ({ ...prev, [taskId]: status }))
+  }
+
+  // Toggle task completion
   const toggleTask = (taskId) => {
-    setCompletedTasks((prev) =>
-      prev.includes(taskId)
-        ? prev.filter((id) => id !== taskId)
-        : [...prev, taskId],
+    const currentStatus = getTaskStatus(taskId)
+    updateTaskStatus(
+      taskId,
+      currentStatus === 'Completed' ? 'Pending' : 'Completed',
     )
   }
 
-  // Delete a task and remove its completion state
+  // Delete a task
   const deleteTask = (taskId) => {
     const confirmed = window.confirm('Are you sure you want to delete this task?')
 
     if (!confirmed) return
 
     setTaskList((prev) => prev.filter((task) => task.id !== taskId))
-    setCompletedTasks((prev) => prev.filter((id) => id !== taskId))
+    setTaskStatuses((prev) => {
+      const updated = { ...prev }
+      delete updated[taskId]
+      return updated
+    })
   }
 
-  // Professional priority badge styles
+  // Priority badge styles
   const getPriorityBadge = (priority) => {
     const styles = {
       High: 'border border-rose-200 bg-rose-50 text-rose-700 ring-1 ring-rose-100',
@@ -65,25 +96,27 @@ function App() {
     return styles[priority] || priorityStyles[priority] || 'bg-gray-100 text-gray-600'
   }
 
+  // Search and status filters
   const filteredTasks = taskList.filter((task) => {
     const matchesSearch = `${task.title} ${task.subject}`
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
 
     const matchesFilter =
-      taskFilter === 'All' ||
-      (taskFilter === 'Pending' && !completedTasks.includes(task.id)) ||
-      (taskFilter === 'Completed' && completedTasks.includes(task.id))
+      taskFilter === 'All' || getTaskStatus(task.id) === taskFilter
 
     return matchesSearch && matchesFilter
   })
 
+  // Add new task
   const handleAddTask = (event) => {
     event.preventDefault()
 
+    const taskId = `task-${Date.now()}`
+
     const taskToAdd = {
       ...newTask,
-      id: `task-${Date.now()}`,
+      id: taskId,
       due: new Date(`${newTask.due}T00:00:00`).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -91,6 +124,7 @@ function App() {
     }
 
     setTaskList((prev) => [taskToAdd, ...prev])
+    setTaskStatuses((prev) => ({ ...prev, [taskId]: 'Pending' }))
     setNewTask({ title: '', subject: '', due: '', priority: 'Medium' })
     setShowAddTask(false)
   }
@@ -155,7 +189,7 @@ function App() {
                       You have {taskList.length - completedCount} tasks remaining.
                     </p>
                     <p className="mt-1 text-xs text-gray-400">
-                      Keep an eye on your upcoming deadlines.
+                      {pendingCount} pending · {inProgressCount} in progress
                     </p>
                   </div>
                 )}
@@ -180,8 +214,8 @@ function App() {
                   : stat.title === 'Completed'
                     ? completedCount
                     : stat.title === 'In Progress'
-                      ? taskList.length - completedCount
-                      : taskList.length - completedCount
+                      ? inProgressCount
+                      : pendingCount
 
               return (
                 <div
@@ -217,8 +251,8 @@ function App() {
                   </p>
                 </div>
 
-                <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
-                  {['All', 'Pending', 'Completed'].map((filter) => (
+                <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+                  {['All', 'Pending', 'In Progress', 'Completed'].map((filter) => (
                     <button
                       key={filter}
                       onClick={() => setTaskFilter(filter)}
@@ -236,13 +270,15 @@ function App() {
 
               <div className="space-y-3">
                 {filteredTasks.map((task) => {
-                  const isCompleted = completedTasks.includes(task.id)
+                  const status = getTaskStatus(task.id)
+                  const isCompleted = status === 'Completed'
 
                   return (
                     <div
                       key={task.id}
-                      className="flex items-center gap-3 rounded-xl border border-gray-100 p-4 transition hover:bg-gray-50"
+                      className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-100 p-4 transition hover:bg-gray-50"
                     >
+                      {/* Completion Toggle */}
                       <button
                         onClick={() => toggleTask(task.id)}
                         className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
@@ -255,6 +291,7 @@ function App() {
                         {isCompleted && <CheckCircle2 size={14} />}
                       </button>
 
+                      {/* Task Details */}
                       <div className="min-w-0 flex-1">
                         <p
                           className={`truncate text-sm font-medium ${
@@ -270,13 +307,26 @@ function App() {
                         </p>
                       </div>
 
+                      {/* Status Dropdown */}
+                      <select
+                        value={status}
+                        onChange={(e) => updateTaskStatus(task.id, e.target.value)}
+                        aria-label={`Status for ${task.title}`}
+                        className={`rounded-lg border px-2 py-1.5 text-xs font-semibold outline-none transition focus:ring-2 focus:ring-indigo-100 ${statusStyles[status]}`}
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                      </select>
+
+                      {/* Priority Badge */}
                       <span
                         className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 ${getPriorityBadge(task.priority)}`}
                       >
                         {task.priority}
                       </span>
 
-                      {/* Delete Task */}
+                      {/* Delete */}
                       <button
                         onClick={() => deleteTask(task.id)}
                         aria-label={`Delete ${task.title}`}
@@ -336,6 +386,21 @@ function App() {
                 />
               </div>
 
+              <div className="mt-5 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Pending</span>
+                  <span className="font-medium text-gray-700">{pendingCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-amber-600">In Progress</span>
+                  <span className="font-medium text-gray-700">{inProgressCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-emerald-600">Completed</span>
+                  <span className="font-medium text-gray-700">{completedCount}</span>
+                </div>
+              </div>
+
               <p className="mt-4 text-center text-xs text-gray-400">
                 Keep up the great work! Small steps lead to big results.
               </p>
@@ -353,26 +418,31 @@ function App() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {taskList
-                .filter((task) => !completedTasks.includes(task.id))
+                .filter((task) => getTaskStatus(task.id) !== 'Completed')
                 .slice(0, 4)
                 .map((task, index) => (
                   <div
                     key={task.id}
                     className="rounded-xl border border-gray-100 p-4 transition hover:shadow-sm"
                   >
-                    <div className="mb-3 flex items-center justify-between">
+                    <div className="mb-3 flex items-center justify-between gap-2">
                       <span className="flex items-center gap-1 text-xs text-gray-400">
                         <CalendarDays size={13} />
                         Deadline {index + 1}
                       </span>
                       <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 ${getPriorityBadge(task.priority)}`}
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${getPriorityBadge(task.priority)}`}
                       >
                         {task.priority}
                       </span>
                     </div>
                     <h3 className="text-sm font-semibold text-gray-800">{task.title}</h3>
                     <p className="mt-2 text-xs text-gray-500">{task.subject}</p>
+                    <p className="mt-2 text-xs font-medium">
+                      <span className={`rounded-full border px-2 py-1 ${statusStyles[getTaskStatus(task.id)]}`}>
+                        {getTaskStatus(task.id)}
+                      </span>
+                    </p>
                     <p className="mt-3 text-sm font-medium text-indigo-600">
                       Due {task.due}
                     </p>
@@ -380,7 +450,7 @@ function App() {
                 ))}
             </div>
 
-            {taskList.every((task) => completedTasks.includes(task.id)) && (
+            {taskList.every((task) => getTaskStatus(task.id) === 'Completed') && (
               <p className="py-6 text-center text-sm text-emerald-600">
                 All tasks completed! Great work 🎉
               </p>
