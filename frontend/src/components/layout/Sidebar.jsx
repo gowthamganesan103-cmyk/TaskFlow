@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   CheckSquare,
   CalendarDays,
+  History,
   Clock,
   Settings,
   ChevronDown,
@@ -17,6 +18,7 @@ const navigation = [
   { label: 'Today', icon: Clock },
   { label: 'Upcoming', icon: CalendarDays },
   { label: 'Calendar', icon: CalendarDays },
+  { label: 'Activity History', icon: History },
 ]
 
 function Sidebar({ activePage, setActivePage }) {

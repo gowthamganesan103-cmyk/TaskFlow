@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import Sidebar from './components/layout/Sidebar'
 import TaskCalendar from './components/calendar/TaskCalendar'
+import ActivityHistory from './components/activity/ActivityHistory'
 import { stats, tasks as initialTasks, priorityStyles } from './data/dashboardData'
 
 const statusStyles = {
@@ -111,6 +112,53 @@ const categoryStyles = {
 }
 
 const taskCategories = ['General', 'Study', 'Work', 'Personal']
+const activityTypeValues = [
+  'created',
+  'edited',
+  'status',
+  'priority',
+  'category',
+  'deleted',
+]
+
+const createActivityId = () =>
+  `activity-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+
+const normalizeActivityHistory = (storedActivities) => {
+  if (!Array.isArray(storedActivities)) return []
+
+  const seenIds = new Set()
+  return storedActivities.flatMap((activity) => {
+    if (
+      !activity ||
+      typeof activity !== 'object' ||
+      typeof activity.taskId !== 'string' ||
+      typeof activity.taskTitle !== 'string' ||
+      !activityTypeValues.includes(activity.type) ||
+      typeof activity.description !== 'string' ||
+      typeof activity.timestamp !== 'string' ||
+      Number.isNaN(Date.parse(activity.timestamp))
+    ) {
+      return []
+    }
+
+    const id =
+      typeof activity.id === 'string' && activity.id
+        ? activity.id
+        : createActivityId()
+    if (seenIds.has(id)) return []
+    seenIds.add(id)
+
+    return [{
+      id,
+      taskId: activity.taskId,
+      taskTitle: activity.taskTitle,
+      type: activity.type,
+      description: activity.description,
+      timestamp: new Date(activity.timestamp).toISOString(),
+    }]
+  })
+}
 
 const formatDueDate = (date) => {
   if (!date) return ''
@@ -188,6 +236,16 @@ function App() {
     }
     return {}
   })
+  const [activityHistory, setActivityHistory] = useState(() => {
+    try {
+      const savedActivities = window.localStorage.getItem('taskflow.activity')
+      return savedActivities
+        ? normalizeActivityHistory(JSON.parse(savedActivities))
+        : []
+    } catch {
+      return []
+    }
+  })
   const [searchTerm, setSearchTerm] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -217,6 +275,19 @@ function App() {
       : 'Pending'
   }
 
+  const recordActivity = (task, type, description) => {
+    const activity = {
+      id: createActivityId(),
+      taskId: task.id,
+      taskTitle: task.title,
+      type,
+      description,
+      timestamp: new Date().toISOString(),
+    }
+
+    setActivityHistory((previous) => [activity, ...previous])
+  }
+
   useEffect(() => {
     try {
       window.localStorage.setItem('taskflow.tasks', JSON.stringify(taskList))
@@ -225,6 +296,17 @@ function App() {
       // The app remains usable when storage is blocked or unavailable.
     }
   }, [taskList, taskStatuses])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        'taskflow.activity',
+        JSON.stringify(activityHistory),
+      )
+    } catch {
+      // Activity tracking remains available for the current session.
+    }
+  }, [activityHistory])
 
   useEffect(() => {
     if (!showAddTask) return undefined
@@ -293,7 +375,18 @@ function App() {
 
   const updateTaskStatus = (taskId, status) => {
     if (!['Pending', 'In Progress', 'Completed'].includes(status)) return
+    const task = taskList.find((item) => item.id === taskId)
+    if (!task) return
+
+    const previousStatus = getTaskStatus(taskId)
+    if (previousStatus === status) return
+
     setTaskStatuses((prev) => ({ ...prev, [taskId]: status }))
+    recordActivity(
+      task,
+      'status',
+      `Changed status from ${previousStatus} to ${status}.`,
+    )
   }
 
   const toggleTask = (taskId) => {
@@ -308,6 +401,10 @@ function App() {
     const confirmed = window.confirm('Are you sure you want to delete this task?')
     if (!confirmed) return
 
+    const task = taskList.find((item) => item.id === taskId)
+    if (!task) return
+
+    recordActivity(task, 'deleted', 'Deleted task.')
     setTaskList((prev) => prev.filter((task) => task.id !== taskId))
     setTaskStatuses((prev) => {
       const updated = { ...prev }
@@ -437,6 +534,7 @@ function App() {
 
     setTaskList((prev) => [taskToAdd, ...prev])
     setTaskStatuses((prev) => ({ ...prev, [taskId]: 'Pending' }))
+    recordActivity(taskToAdd, 'created', 'Created task.')
     closeTaskModal()
   }
 
@@ -454,6 +552,49 @@ function App() {
       due: newTask.due,
       priority: newTask.priority,
       category: newTask.category,
+    }
+
+    const detailChanges = []
+    if (editingTask.title !== updatedTask.title) {
+      detailChanges.push(
+        `renamed task from "${editingTask.title}" to "${updatedTask.title}"`,
+      )
+    }
+    if (editingTask.subject !== updatedTask.subject) {
+      detailChanges.push(
+        `changed subject from "${editingTask.subject}" to "${updatedTask.subject}"`,
+      )
+    }
+    if (editingTask.due !== updatedTask.due) {
+      detailChanges.push(
+        `changed due date from ${formatDueDate(editingTask.due) || 'none'} to ${formatDueDate(updatedTask.due)}`,
+      )
+    }
+
+    const previousPriority = editingTask.priority || 'Medium'
+    if (previousPriority !== updatedTask.priority) {
+      recordActivity(
+        updatedTask,
+        'priority',
+        `Changed priority from ${previousPriority} to ${updatedTask.priority}.`,
+      )
+    }
+
+    const previousCategory = editingTask.category || 'General'
+    if (previousCategory !== updatedTask.category) {
+      recordActivity(
+        updatedTask,
+        'category',
+        `Changed category from ${previousCategory} to ${updatedTask.category}.`,
+      )
+    }
+
+    if (detailChanges.length > 0) {
+      recordActivity(
+        updatedTask,
+        'edited',
+        `Updated task details: ${detailChanges.join('; ')}.`,
+      )
     }
 
     setTaskList((prev) =>
@@ -549,6 +690,14 @@ function App() {
     setSearchOpen(false)
     setNotificationsOpen(false)
     setActivePage(page)
+  }
+
+  const openTaskFromActivity = (taskId) => {
+    const task = taskList.find((item) => item.id === taskId)
+    if (!task) return
+
+    handlePageChange('Overview')
+    handleEditTask(task)
   }
 
   return (
@@ -688,7 +837,13 @@ function App() {
             })}
           </section>
 
-          {activePage === 'Calendar' ? (
+          {activePage === 'Activity History' ? (
+            <ActivityHistory
+              activities={activityHistory}
+              tasks={taskList}
+              onOpenTask={openTaskFromActivity}
+            />
+          ) : activePage === 'Calendar' ? (
             <TaskCalendar
               tasks={taskList}
               getTaskStatus={getTaskStatus}
