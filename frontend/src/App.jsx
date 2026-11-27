@@ -10,6 +10,7 @@ import {
   Trash2,
   ListTodo,
   RotateCcw,
+  Pencil,
 } from 'lucide-react'
 import Sidebar from './components/layout/Sidebar'
 import { stats, tasks as initialTasks, priorityStyles } from './data/dashboardData'
@@ -20,7 +21,7 @@ const statusStyles = {
   Completed: 'border-emerald-200 bg-emerald-50 text-emerald-700',
 }
 
-// Converts due dates like "Nov 27" or "2026-11-27" to sortable timestamps
+// Converts due dates to sortable timestamps
 const getDueDateValue = (due) => {
   if (!due) return Number.MAX_SAFE_INTEGER
 
@@ -31,9 +32,7 @@ const getDueDateValue = (due) => {
 
   const parsed = new Date(due)
 
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.getTime()
-  }
+  if (!Number.isNaN(parsed.getTime())) return parsed.getTime()
 
   const currentYear = new Date().getFullYear()
   const parsedWithYear = new Date(`${due}, ${currentYear}`)
@@ -52,17 +51,14 @@ const getDeadlineUrgency = (due, status) => {
 
   let deadline
 
-  // Parse ISO date without timezone conversion
   if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
     const [year, month, day] = due.split('-').map(Number)
     deadline = new Date(year, month - 1, day)
   } else {
-    // Parse dates like "Nov 27"
     deadline = new Date(`${due}, ${today.getFullYear()}`)
 
     if (Number.isNaN(deadline.getTime())) return null
 
-    // Treat dates far in the past as next year's deadline
     const daysDifference = (deadline - today) / (1000 * 60 * 60 * 24)
 
     if (daysDifference < -180) {
@@ -84,6 +80,41 @@ const urgencyStyles = {
   Upcoming: 'border-indigo-200 bg-indigo-50 text-indigo-600',
 }
 
+// Converts displayed date to a date input value
+const getEditableDate = (due) => {
+  if (!due) return ''
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(due)) return due
+
+  const today = new Date()
+  let parsed = new Date(`${due}, ${today.getFullYear()}`)
+
+  if (Number.isNaN(parsed.getTime())) return ''
+
+  const daysDifference = (parsed - today) / (1000 * 60 * 60 * 24)
+
+  if (daysDifference < -180) {
+    parsed.setFullYear(parsed.getFullYear() + 1)
+  }
+
+  const year = parsed.getFullYear()
+  const month = String(parsed.getMonth() + 1).padStart(2, '0')
+  const day = String(parsed.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+// Converts ISO date into display date
+const formatDueDate = (date) => {
+  if (!date) return ''
+
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Overview')
   const [taskList, setTaskList] = useState(
@@ -95,6 +126,7 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
+  const [editingTask, setEditingTask] = useState(null)
   const [taskFilter, setTaskFilter] = useState('All')
   const [sortBy, setSortBy] = useState('default')
 
@@ -125,12 +157,10 @@ function App() {
     ? Math.round((completedCount / taskList.length) * 100)
     : 0
 
-  // Update task status
   const updateTaskStatus = (taskId, status) => {
     setTaskStatuses((prev) => ({ ...prev, [taskId]: status }))
   }
 
-  // Toggle task completion
   const toggleTask = (taskId) => {
     const currentStatus = getTaskStatus(taskId)
     updateTaskStatus(
@@ -139,10 +169,8 @@ function App() {
     )
   }
 
-  // Delete a task
   const deleteTask = (taskId) => {
     const confirmed = window.confirm('Are you sure you want to delete this task?')
-
     if (!confirmed) return
 
     setTaskList((prev) => prev.filter((task) => task.id !== taskId))
@@ -153,7 +181,6 @@ function App() {
     })
   }
 
-  // Priority badge styles
   const getPriorityBadge = (priority) => {
     const styles = {
       High: 'border border-rose-200 bg-rose-50 text-rose-700 ring-1 ring-rose-100',
@@ -165,10 +192,8 @@ function App() {
     return styles[priority] || priorityStyles[priority] || 'bg-gray-100 text-gray-600'
   }
 
-  // Reusable deadline badge
   const renderUrgencyBadge = (task, status) => {
     const urgency = getDeadlineUrgency(task.due, status)
-
     if (!urgency) return null
 
     return (
@@ -180,7 +205,66 @@ function App() {
     )
   }
 
-  // Search and status filters
+  // Edit an existing task
+  const handleEditTask = (task) => {
+    setEditingTask(task)
+    setNewTask({
+      title: task.title,
+      subject: task.subject,
+      due: getEditableDate(task.due),
+      priority: task.priority,
+    })
+    setShowAddTask(true)
+  }
+
+  // Reset and close task modal
+  const closeTaskModal = () => {
+    setShowAddTask(false)
+    setEditingTask(null)
+    setNewTask({ title: '', subject: '', due: '', priority: 'Medium' })
+  }
+
+  // Add new task
+  const handleAddTask = (event) => {
+    event.preventDefault()
+
+    const taskId = `task-${Date.now()}`
+
+    const taskToAdd = {
+      ...newTask,
+      title: newTask.title.trim(),
+      subject: newTask.subject.trim(),
+      id: taskId,
+      due: formatDueDate(newTask.due),
+    }
+
+    setTaskList((prev) => [taskToAdd, ...prev])
+    setTaskStatuses((prev) => ({ ...prev, [taskId]: 'Pending' }))
+    closeTaskModal()
+  }
+
+  // Save edited task
+  const handleUpdateTask = (event) => {
+    event.preventDefault()
+    if (!editingTask) return
+
+    const updatedTask = {
+      ...editingTask,
+      title: newTask.title.trim(),
+      subject: newTask.subject.trim(),
+      due: formatDueDate(newTask.due),
+      priority: newTask.priority,
+    }
+
+    setTaskList((prev) =>
+      prev.map((task) =>
+        task.id === editingTask.id ? updatedTask : task,
+      ),
+    )
+
+    closeTaskModal()
+  }
+
   const filteredTasks = taskList.filter((task) => {
     const matchesSearch = `${task.title} ${task.subject}`
       .toLowerCase()
@@ -192,7 +276,6 @@ function App() {
     return matchesSearch && matchesFilter
   })
 
-  // Sort filtered tasks
   const sortedTasks = [...filteredTasks].sort((a, b) => {
     if (sortBy === 'priority') {
       const priorityOrder = { High: 1, Medium: 2, Low: 3 }
@@ -208,35 +291,12 @@ function App() {
         const idNumber = Number(task.id.replace('task-', ''))
         return Number.isNaN(idNumber) ? 0 : idNumber
       }
-
       return getTaskTimestamp(b) - getTaskTimestamp(a)
     }
 
     return 0
   })
 
-  // Add new task
-  const handleAddTask = (event) => {
-    event.preventDefault()
-
-    const taskId = `task-${Date.now()}`
-
-    const taskToAdd = {
-      ...newTask,
-      id: taskId,
-      due: new Date(`${newTask.due}T00:00:00`).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      }),
-    }
-
-    setTaskList((prev) => [taskToAdd, ...prev])
-    setTaskStatuses((prev) => ({ ...prev, [taskId]: 'Pending' }))
-    setNewTask({ title: '', subject: '', due: '', priority: 'Medium' })
-    setShowAddTask(false)
-  }
-
-  // Task filter counts
   const filterCounts = {
     All: totalCount,
     Pending: pendingCount,
@@ -244,7 +304,6 @@ function App() {
     Completed: completedCount,
   }
 
-  // Reset search, filter, and sorting
   const resetFilters = () => {
     setSearchTerm('')
     setTaskFilter('All')
@@ -331,7 +390,11 @@ function App() {
               </div>
 
               <button
-                onClick={() => setShowAddTask(true)}
+                onClick={() => {
+                  setEditingTask(null)
+                  setNewTask({ title: '', subject: '', due: '', priority: 'Medium' })
+                  setShowAddTask(true)
+                }}
                 className="flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 sm:px-4"
               >
                 <Plus size={18} />
@@ -387,7 +450,7 @@ function App() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Status Filters with Counters */}
+                  {/* Status Filters */}
                   <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
                     {['All', 'Pending', 'In Progress', 'Completed'].map((filter) => (
                       <button
@@ -413,7 +476,7 @@ function App() {
                     ))}
                   </div>
 
-                  {/* Sorting Dropdown */}
+                  {/* Sorting */}
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
@@ -441,7 +504,7 @@ function App() {
                         key={task.id}
                         className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-100 p-4 transition hover:bg-gray-50"
                       >
-                        {/* Completion Toggle */}
+                        {/* Completion */}
                         <button
                           onClick={() => toggleTask(task.id)}
                           className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
@@ -454,7 +517,7 @@ function App() {
                           {isCompleted && <CheckCircle2 size={14} />}
                         </button>
 
-                        {/* Task Details */}
+                        {/* Details */}
                         <div className="min-w-0 flex-1">
                           <p
                             className={`truncate text-sm font-medium ${
@@ -481,7 +544,7 @@ function App() {
                           </div>
                         </div>
 
-                        {/* Status Dropdown */}
+                        {/* Status */}
                         <select
                           value={status}
                           onChange={(e) => updateTaskStatus(task.id, e.target.value)}
@@ -493,12 +556,22 @@ function App() {
                           <option value="Completed">Completed</option>
                         </select>
 
-                        {/* Priority Badge */}
+                        {/* Priority */}
                         <span
                           className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all duration-200 hover:scale-105 ${getPriorityBadge(task.priority)}`}
                         >
                           {task.priority}
                         </span>
+
+                        {/* Edit */}
+                        <button
+                          onClick={() => handleEditTask(task)}
+                          aria-label={`Edit ${task.title}`}
+                          title="Edit task"
+                          className="shrink-0 rounded-lg p-2 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600"
+                        >
+                          <Pencil size={16} />
+                        </button>
 
                         {/* Delete */}
                         <button
@@ -614,41 +687,41 @@ function App() {
                   const urgency = getDeadlineUrgency(task.due, status)
 
                   return (
-                  <div
-                    key={task.id}
-                    className="rounded-xl border border-gray-100 p-4 transition hover:shadow-sm"
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-1 text-xs text-gray-400">
-                        <CalendarDays size={13} />
-                        Deadline {index + 1}
-                      </span>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold ${getPriorityBadge(task.priority)}`}
-                      >
-                        {task.priority}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-semibold text-gray-800">{task.title}</h3>
-                    <p className="mt-2 text-xs text-gray-500">{task.subject}</p>
-                    <p className="mt-2 text-xs font-medium">
-                      <span className={`rounded-full border px-2 py-1 ${statusStyles[status]}`}>
-                        {status}
-                      </span>
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium text-indigo-600">
-                        Due {task.due}
-                      </p>
-                      {urgency && (
-                        <span
-                          className={`rounded-full border px-2 py-1 text-xs font-semibold ${urgencyStyles[urgency]}`}
-                        >
-                          {urgency}
+                    <div
+                      key={task.id}
+                      className="rounded-xl border border-gray-100 p-4 transition hover:shadow-sm"
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                          <CalendarDays size={13} />
+                          Deadline {index + 1}
                         </span>
-                      )}
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-semibold ${getPriorityBadge(task.priority)}`}
+                        >
+                          {task.priority}
+                        </span>
+                      </div>
+                      <h3 className="text-sm font-semibold text-gray-800">{task.title}</h3>
+                      <p className="mt-2 text-xs text-gray-500">{task.subject}</p>
+                      <p className="mt-2 text-xs font-medium">
+                        <span className={`rounded-full border px-2 py-1 ${statusStyles[status]}`}>
+                          {status}
+                        </span>
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium text-indigo-600">
+                          Due {task.due}
+                        </p>
+                        {urgency && (
+                          <span
+                            className={`rounded-full border px-2 py-1 text-xs font-semibold ${urgencyStyles[urgency]}`}
+                          >
+                            {urgency}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
                   )
                 })}
             </div>
@@ -662,17 +735,21 @@ function App() {
         </div>
       </main>
 
-      {/* Add Task Modal */}
-      {showAddTask && (
+      {/* Add / Edit Task Modal */}
+      {(showAddTask || editingTask) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Create New Task</h2>
-                <p className="mt-1 text-sm text-gray-500">Add a task to your planner</p>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {editingTask ? 'Edit Task' : 'Create New Task'}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {editingTask ? 'Update your task details' : 'Add a task to your planner'}
+                </p>
               </div>
               <button
-                onClick={() => setShowAddTask(false)}
+                onClick={closeTaskModal}
                 aria-label="Close form"
                 className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
               >
@@ -680,7 +757,10 @@ function App() {
               </button>
             </div>
 
-            <form onSubmit={handleAddTask} className="space-y-4">
+            <form
+              onSubmit={editingTask ? handleUpdateTask : handleAddTask}
+              className="space-y-4"
+            >
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Task name</label>
                 <input
@@ -730,7 +810,7 @@ function App() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddTask(false)}
+                  onClick={closeTaskModal}
                   className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
                 >
                   Cancel
@@ -739,7 +819,7 @@ function App() {
                   type="submit"
                   className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
                 >
-                  Add Task
+                  {editingTask ? 'Save Changes' : 'Add Task'}
                 </button>
               </div>
             </form>
